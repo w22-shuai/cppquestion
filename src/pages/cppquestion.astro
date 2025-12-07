@@ -4,8 +4,19 @@ export const prerender = false;
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 
+const timenow = Math.floor(Date.now() / 1000);
+
+let timelast = await env.checkidentity.get("time");
+timelast = timelast ? parseInt(timelast) : 0;
+if ((timenow - timelast) > 86400) {
+    const newToken = crypto.randomUUID();
+    await env.checkidentity.put('time', timenow.toString());
+    await env.checkidentity.put('cookie', newToken);
+    return Astro.redirect("/login");
+}
+
 // =========================================================
-// 1. 鉴权逻辑
+// 1. 鉴权逻辑 (保持不变)
 // =========================================================
 const userToken = Astro.cookies.get("auth_token")?.value;
 let serverToken = null;
@@ -16,11 +27,11 @@ if (env?.checkidentity) {
 
 if (!userToken || !serverToken || userToken !== serverToken) {
     Astro.cookies.delete("auth_token", { path: "/" });
-    return Astro.redirect("/blog/login");
+    return Astro.redirect("/login");
 }
 
 // =========================================================
-// 2. 数据库逻辑
+// 2. 数据库逻辑 (保持不变)
 // =========================================================
 
 // POST: 提交修改
@@ -57,79 +68,203 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>待处理任务</title>
+    <title>待处理任务 HUB</title>
     <style>
-        body { font-family: sans-serif; padding: 60px 20px; }
+        /* ==================== 核心背景设置 ==================== */
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 80px 20px;
+            color: #fff;
+            min-height: 100vh;
+            box-sizing: border-box;
 
+            /* >>> 在这里替换你的壁纸 URL <<< */
+            background-image: url('https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=2069&auto=format&fit=crop');
+
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+
+        /* 黑色半透明蒙版，让文字看清 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75); /* 调节 0.75 可以改变背景黑度 */
+            z-index: -1;
+            backdrop-filter: blur(3px); /* 给背景一点点模糊 */
+        }
+
+        h3 {
+            text-align: center;
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+            color: #ccc;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+            display: inline-block;
+            position: relative;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* ==================== HUD 按钮样式 ==================== */
+        .hud-btn {
+            position: fixed;
+            top: 30px;
+            padding: 12px 25px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid;
+            border-radius: 4px; /*稍微圆角*/
+            cursor: pointer;
+            z-index: 1000;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-decoration: none;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            font-size: 14px;
+        }
+
+        /* 左侧提交按钮 (青蓝色系) */
         #submit-btn {
-            position: fixed; top: 20px; left: 20px;
-            padding: 10px 20px; background: #007bff; color: #fff;
-            border: none; border-radius: 5px; cursor: pointer;
-            z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-weight: bold;
+            left: 30px;
+            border-color: #00f2ff;
+            color: #00f2ff;
+            /* 动态脉冲动画：3秒一次 */
+            animation: pulse-cyan 3s infinite;
         }
-        #submit-btn:hover { background: #0056b3; }
-        #submit-btn:disabled { background: #ccc; }
+        #submit-btn:hover {
+            background: rgba(0, 242, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.6);
+            text-shadow: 0 0 5px #00f2ff;
+        }
+        #submit-btn:disabled {
+            border-color: #555;
+            color: #777;
+            animation: none;
+            cursor: not-allowed;
+        }
 
+        /* 右侧插入按钮 (荧光绿色系) */
         #insert-btn {
-            position: fixed; top: 20px; right: 20px;
-            padding: 10px 20px; background: #28a745; color: #fff;
-            text-decoration: none; border-radius: 5px;
-            z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-weight: bold; font-size: 14px;
+            right: 30px;
+            border-color: #0aff60;
+            color: #0aff60;
+            animation: pulse-green 3s infinite;
         }
-        #insert-btn:hover { background: #218838; }
+        #insert-btn:hover {
+            background: rgba(10, 255, 96, 0.2);
+            box-shadow: 0 0 20px rgba(10, 255, 96, 0.6);
+            text-shadow: 0 0 5px #0aff60;
+        }
 
+        /* ==================== 脉冲动画 Keyframes ==================== */
+        @keyframes pulse-cyan {
+            0% { box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(0, 242, 255, 0); } /* 扩散并消失 */
+            100% { box-shadow: 0 0 0 0 rgba(0, 242, 255, 0); }
+        }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(10, 255, 96, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(10, 255, 96, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(10, 255, 96, 0); }
+        }
+
+        /* ==================== 网格卡片 ==================== */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px; margin-top: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
         .item {
-            padding: 15px; border: 1px solid #ddd; border-radius: 6px;
-            text-align: center; cursor: pointer; user-select: none;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05); /* 极淡的背景 */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
             word-break: break-all;
-            background: #fff;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            font-size: 15px;
         }
 
+        /* 悬停效果 */
+        .item:hover {
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* 选中状态 (高亮) */
         .item.selected {
-            background-color: #d4edda; border-color: #28a745; color: #155724;
-            transform: scale(1.02);
-            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+            background: rgba(10, 255, 96, 0.15); /* 绿色背景 */
+            border-color: #0aff60;
+            color: #0aff60;
+            box-shadow: 0 0 15px rgba(10, 255, 96, 0.3) inset, 0 0 10px rgba(10, 255, 96, 0.3);
+            text-shadow: 0 0 2px #000;
+            font-weight: bold;
+        }
+
+        /* 选中时的左上角小角标装饰 */
+        .item.selected::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 0; height: 0;
+            border-top: 15px solid #0aff60;
+            border-right: 15px solid transparent;
+        }
+
+        .empty-msg {
+            color: rgba(255,255,255,0.4);
+            text-align: center;
+            margin-top: 100px;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
         }
     </style>
 </head>
 <body>
 
-<!-- 注意：删掉了 onclick="submitData()" -->
-<button id="submit-btn">提交完成项</button>
+<!-- 加上 class hud-btn -->
+<button id="submit-btn" class="hud-btn">提交完成项</button>
 
-<a href="/insert" id="insert-btn">插入问题 +</a>
+<!-- 加上 class hud-btn -->
+<a href="/insert" id="insert-btn" class="hud-btn">插入问题 +</a>
 
-<h3>待处理列表 (Value = 0)</h3>
+<h3>待处理任务列表</h3>
 
 <div class="grid">
     {results.map((row) => (
-        <!-- 注意：删掉了 onclick="toggleSelect(this)" -->
             <div class="item" data-key={row.key}>
                 {row.key}
             </div>
     ))}
 </div>
 
-{results.length === 0 && <p style="color:#666; text-align:center; margin-top: 50px;">暂无待处理数据。</p>}
+{results.length === 0 && <p class="empty-msg">:: 系统检测无待处理数据 ::</p>}
 
 <!--
-  脚本放在最后面
-  使用 is:inline 确保不被 astro 干扰
+  JS 逻辑完全保持不变，确保功能正常
 -->
 <script is:inline>
-    // 等待页面加载完成 (保险起见)
     document.addEventListener('DOMContentLoaded', () => {
-
-        // 1. 给每一个 item 绑定点击事件 (代替 toggleSelect)
         const items = document.querySelectorAll('.item');
         items.forEach(item => {
             item.addEventListener('click', function() {
@@ -137,23 +272,23 @@ try {
             });
         });
 
-        // 2. 给提交按钮绑定点击事件 (代替 submitData)
         const btn = document.getElementById('submit-btn');
         if (btn) {
             btn.addEventListener('click', async () => {
                 const selected = document.querySelectorAll('.item.selected');
 
                 if (selected.length === 0) {
-                    alert("请先选择！");
+                    // 自定义一点的 alert (这里还是用系统默认的)
+                    alert("⚠️ 操作提示：请至少选择一个项目！");
                     return;
                 }
 
                 const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
 
-                if(!confirm(`确认标记 ${keys.length} 条数据为已完成吗？`)) return;
+                if(!confirm(`[系统确认] 标记 ${keys.length} 条数据为已完成？`)) return;
 
                 btn.disabled = true;
-                btn.innerText = "提交中...";
+                btn.innerText = "PROCESSING...";
 
                 try {
                     const res = await fetch(window.location.href, {
@@ -166,13 +301,13 @@ try {
                         window.location.reload();
                     } else {
                         const txt = await res.text();
-                        alert("提交失败: " + txt);
+                        alert("ERROR: " + txt);
                         btn.disabled = false;
                         btn.innerText = "提交完成项";
                     }
                 } catch (e) {
                     console.error(e);
-                    alert("网络错误");
+                    alert("网络连接错误");
                     btn.disabled = false;
                     btn.innerText = "提交完成项";
                 }
