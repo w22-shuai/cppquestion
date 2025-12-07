@@ -1,0 +1,23 @@
+---
+export const prerender = false;
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+// 防止本地开发报错
+if (!env || !env.checkidentity) {
+    throw new Error("请确保 wrangler.toml 绑定了 checkidentity KV");
+}
+
+const timenow = Math.floor(Date.now() / 1000);
+
+let timelast = await env.checkidentity.get("time");
+timelast = timelast ? parseInt(timelast) : 0;
+if ((timenow - timelast) > 86400) {
+    const newToken = crypto.randomUUID();
+    await env.checkidentity.put('time', timenow.toString());
+    await env.checkidentity.put('cookie', newToken);
+}
+
+
+---
