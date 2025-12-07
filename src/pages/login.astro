@@ -4,21 +4,36 @@ export const prerender = false;
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 
-// =================================================================
-// 1. RSA 私钥 (后端解密用) - 请勿泄露
-// =================================================================
-const PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
-MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEA13+t74uJ/6aXjQ5q
-z+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
-qJ5qJwIDAQABAkAz+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
-qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJAiEA/wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5
-qJ5qJ5qJ5qJ5qJ8CIQD+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5wIh
-ANd/re+Lif+ml40Oas/oxfm2eHfMBaubY+WeaieaieaiAiEA/wFq5tj5Z5qJ5qJ5
-qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ8CIQD+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5
-qJ5qJ5qJ5w==
------END PRIVATE KEY-----`;
 
-// --- 后端 RSA 解密工具函数 ---
+const PRIVATE_KEY_PEM =`-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC017jit3pwl9Bq
+neBmTvf4n6GU/S1kRN0EvN2jAqB5xDjiCd3q6xmwDKo4vKHr/u+FL+zNeu0PReBZ
+ai3fOdGPzva7/93XOl2fCP4VVuTd5pMNx7G/iz0s/03EIZCV4gOfo8/KKucRgHYj
+EaSsgoBulDel7Xw9tAA7/V/3/pqX1l+0Ldkrd561A3qdCD1JUPVACQ7HffTgOo3i
+IliMHMC6FxNVXEkbw/Zyv1By/Ww9Y2xLz2az9n6CotmbWNchsvwzPZNyFpkeztvE
+rUaniZe60tK/5sUmcqw+RqZ3TZ5aLFc/k5kgqBOHq/R7AGdpuyjKbBHY0XYh3l4e
+NdR/b/5zAgMBAAECggEAFc/JCGtJ1MeyxxE4rg5LQUz7n60zqtrVb4taDh20fktI
+8xZukjV9+Spl44b43q52dDF2FciETCnI5+/zDW/7UyWKw90WBC4ReauLfcZnv03e
+obRav3gLTmCSoBvORQ2oEzqeRsuK6CT+2rb3jikFVZEB7zzoFccemh2y1AX83mA0
+bTO+4eeqZKy470ZWrUJ0nEK4mEAmWc9KrO46myM9FWU3jRjtGF4VKs8ZM5DLT6ht
+kAA8p9e0BhL61aF5e0ksNIjkvj/myZU6/acqTjDJH93P5tdpb0eNMxRHAklrV9zz
+N0xNfeFe06E1F1qg5fll31QoXF950XXrNhi3kun5KQKBgQDaTXat3TofXNmoN6Fa
+QkVskvulCTtGIv9Ay6v9Pbcqr1lQxxjOnw7Z9N1Ynu5zW/DPR+cIJtGNIWhK0igO
+EgLwarBe9LQ4ZWsXXV/l0KX5sje4TAKBs67IqVmzVh+/1w3XaeywuqkyaLlwZSxs
+yHpGmAReFBnKhfNkm00LzDhUyQKBgQDUEkMHLGktZS3VkfDa+eyXupAldPpT3Rhv
++iSxUC7gwOf+barNPdsApIswFB6N3FKoJHJQp6hGYrwPADzgzvVBqwMEv010cri3
+A/OF4NALrG+EuXKstvzwTjGnsvhIBMT67ZXIN2VPwOlkWCo3Zmnfsh7oO9c5k+1I
+4/VHmk+DWwKBgQC1GU47LivpmL14L65Lkm7Fg6n/X4ksxhu7RTuI+onZf145BPIv
+dwR7DAgUXMS0LrG3Q48F1C5DRlOevnk8MvT9PYTTQW3A22HcIDpODKmkW5Sd73Ck
+6Ms27Ebd37S3EVEKQ3V3p2J1zysHcudH14iYx8PXyBUdTcJ809k20FRrAQKBgGw4
+tYPfofzMeUtXonXcvGPhjNXQkD5jwajDGh5yMLn5N2qbRGJggnYdgfoTClSSbovn
+rX6DUFg64oU1NdvzQS01u+CcT0ZxlNmwZoGXbBPI90/f4ylIaGOpQ6W0qwb1iCAV
+Ri5aNpUweOoAI+sJlFXXa/ZPM1Hqr1hXHEBh+tmpAoGBALMhHjPeIdUk1I65BUZD
+PGcxTMAP+2LOZREqqzM8bjAzuxjdOXsrTexVyxzaFys7koEjxqKgruqRq1MjqWNY
+nAOvepvE87pgqVwHLxhF5X6sFtE+kATsAXI4+xqm+HW1netjUiL/lWBMAMPyCQzf
+NafUvvaJZkT2HH6q9VGaGl5x
+-----END PRIVATE KEY-----
+`
 async function decryptData(encryptedBase64) {
 	try {
 		// 1. 处理 PEM 格式
@@ -62,10 +77,6 @@ async function decryptData(encryptedBase64) {
 }
 
 
-// =================================================================
-// 2. 24小时 Token 轮转逻辑 (保持原有逻辑)
-// =================================================================
-// 防止本地开发报错
 if (!env || !env.checkidentity) {
 	// throw new Error("请确保 wrangler.toml 绑定了 checkidentity KV");
 	// 为了不让页面挂掉，本地开发时这里不抛错，只是不能登录
@@ -331,10 +342,15 @@ if (Astro.request.method === "POST") {
 -->
 <script is:inline>
 	const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MIIBUuAgEANBgkqhkiG9w0BAQEFAASCATowggE6AgEAAkEA13+t74uJ/6aXjQ5q
-z+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
-qJ5qJwIDAQAB
------END PUBLIC KEY-----`;
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtNe44rd6cJfQap3gZk73
++J+hlP0tZETdBLzdowKgecQ44gnd6usZsAyqOLyh6/7vhS/szXrtD0XgWWot3znR
+j872u//d1zpdnwj+FVbk3eaTDcexv4s9LP9NxCGQleIDn6PPyirnEYB2IxGkrIKA
+bpQ3pe18PbQAO/1f9/6al9ZftC3ZK3eetQN6nQg9SVD1QAkOx3304DqN4iJYjBzA
+uhcTVVxJG8P2cr9Qcv1sPWNsS89ms/Z+gqLZm1jXIbL8Mz2TchaZHs7bxK1Gp4mX
+utLSv+bFJnKsPkamd02eWixXP5OZIKgTh6v0ewBnabsoymwR2NF2Id5eHjXUf2/+
+cwIDAQAB
+-----END PUBLIC KEY-----
+`;
 
 	// --- 前端 RSA 加密工具函数 ---
 	async function encryptData(data) {
