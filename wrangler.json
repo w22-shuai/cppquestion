@@ -17,5 +17,12 @@
 			"database_name": "cppquestion",
 			"database_id": "2748d1c4-91ed-411c-9a1c-7b08bb6e414b"
 		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "checkidentity",
+			"id": "checkidentity",
+			"preview_id": "04386210368e460fa494df2318adf6ef"
+		}
 	]
 }
