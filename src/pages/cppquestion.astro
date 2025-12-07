@@ -6,6 +6,17 @@ const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 
 
+const timenow = Math.floor(Date.now() / 1000);
+
+let timelast = await env.checkidentity.get("time");
+timelast = timelast ? parseInt(timelast) : 0;
+
+if ((timenow - timelast) > 86400) {
+    const newToken = crypto.randomUUID();
+    await env.checkidentity.put('time', timenow.toString());
+    await env.checkidentity.put('cookie', newToken);
+}
+
 const userToken = Astro.cookies.get("auth_token")?.value;
 let serverToken = null;
 
@@ -21,12 +32,10 @@ if (!userToken || !serverToken || userToken !== serverToken) {
 
 
 
-// 处理提交 (POST)：把选中的项目 value 改成 1
 if (Astro.request.method === "POST") {
     try {
         const selectedKeys = await Astro.request.json();
         if (selectedKeys && selectedKeys.length > 0) {
-            // 使用 cppquestion 绑定
             const stmt = env.cppquestion.prepare(
                 "UPDATE [Order] SET value = 1 WHERE key = ?"
             );
