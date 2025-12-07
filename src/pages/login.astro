@@ -1,0 +1,56 @@
+---
+export const prerender = false;
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+let isLoggedIn = false;
+
+const cookieToken = Astro.cookies.get("auth_token")?.value;
+
+
+if (env?.checkidentity) {
+	const kvToken = await env.checkidentity.get("cookie");
+	if (kvToken === cookieToken) {
+		isLoggedIn = true;
+	} else {
+		Astro.cookies.delete("auth_token", { path: "/" });
+	}
+}
+
+if (Astro.request.method === "POST") {
+	const formData = await Astro.request.formData();
+	const key = formData.get("key");
+	const value = formData.get("value");
+
+	if (key === "ybysb" && value === "e5f04750905af0abed99b3b119474ce4") {
+		const token = crypto.randomUUID();
+		const ttl = 86400;
+
+		if (env?.checkidentity) {
+			await env.checkidentity.put(key.toString(), token, { expirationTtl: ttl });
+		}
+		Astro.cookies.set("auth_token", key.toString(), { path: "/", maxAge: ttl, httpOnly: true, secure: true });
+		isLoggedIn = true;
+	}
+}
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Login</title>
+</head>
+<body style="padding: 50px; display: flex; flex-direction: column; align-items: center;">
+
+<h3>状态: {isLoggedIn ? "已登录 (24h有效)" : "未登录"}</h3>
+
+<form method="POST" style="display: flex; flex-direction: column; gap: 10px; width: 300px;">
+	<input type="text" name="key" placeholder="Key" required>
+	<input type="password" name="value" placeholder="Value" required>
+	<button type="submit">提交</button>
+</form>
+
+</body>
+</html>
