@@ -351,17 +351,12 @@ utLSv+bFJnKsPkamd02eWixXP5OZIKgTh6v0ewBnabsoymwR2NF2Id5eHjXUf2/+
 cwIDAQAB
 -----END PUBLIC KEY-----
 `;
-
-	// --- 前端 RSA 加密工具函数 ---
 	async function encryptData(data) {
 		try {
 			// 1. 处理 PEM
-			const pemHeader = "-----BEGIN PUBLIC KEY-----";
-			const pemFooter = "-----END PUBLIC KEY-----";
-			const pemContents = PUBLIC_KEY_PEM.substring(
-				pemHeader.length,
-				PUBLIC_KEY_PEM.length - pemFooter.length
-			).replace(/\s/g, "");
+			const pemContents = PRIVATE_KEY_PEM
+				.replace(/-----[^-]+-----/g, "")
+				.replace(/\s+/g, "");
 
 			// 2. Base64 转 ArrayBuffer
 			const binaryDerString = atob(pemContents);
@@ -403,13 +398,10 @@ cwIDAQAB
 			return null;
 		}
 	}
-
-	// --- 表单提交拦截 ---
 	const form = document.getElementById('loginForm');
 	const rawPassInput = document.getElementById('raw_password');
 	const encryptedInput = document.getElementById('encrypted_value');
 	const btn = document.getElementById('submitBtn');
-
 	if (form) {
 		form.addEventListener('submit', async (e) => {
 			e.preventDefault(); // 阻止默认提交
