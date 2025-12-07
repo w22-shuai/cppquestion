@@ -5,17 +5,20 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c9c347a8-c30c-45ef-a575-4e970bda9187" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/src/pages/about.astro" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/blog/[...slug].astro" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/blog/index.astro" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/blog/index.astro" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/index.astro" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/rss.xml.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/wrangler.json" beforeDir="false" afterPath="$PROJECT_DIR$/wrangler.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/login.astro" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/login.astro" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Astro Component" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -54,6 +57,11 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\cppquestion\src\pages" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -69,7 +77,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1765111633775</updated>
-      <workItem from="1765111634915" duration="1270000" />
+      <workItem from="1765111634915" duration="3346000" />
     </task>
     <servers />
   </component>

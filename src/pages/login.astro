@@ -1,20 +1,16 @@
 ---
-export const prerender = false;
-
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 let isLoggedIn = false;
 
-const cookieToken = Astro.cookies.get("auth_token")?.value;
+const timenow=Math.floor(Date.now() / 1000)
 
+const timelast = await env.checkidentity.get("time");
 
-if (env?.checkidentity) {
-	const kvToken = await env.checkidentity.get("cookie");
-	if (kvToken === cookieToken) {
-		isLoggedIn = true;
-	} else {
-		Astro.cookies.delete("auth_token", { path: "/" });
-	}
+if(timenow-timelast>86400){
+	await env.KV.put('time', timenow);
+	const token = crypto.randomUUID();
+	await env.KV.put('cookie', timenow);
 }
 
 if (Astro.request.method === "POST") {
@@ -23,16 +19,16 @@ if (Astro.request.method === "POST") {
 	const value = formData.get("value");
 
 	if (key === "ybysb" && value === "e5f04750905af0abed99b3b119474ce4") {
-		const token = crypto.randomUUID();
+		const cookie=await env.KV.get('cookie');
 		const ttl = 86400;
-
-		if (env?.checkidentity) {
-			await env.checkidentity.put(key.toString(), token, { expirationTtl: ttl });
-		}
-		Astro.cookies.set("auth_token", key.toString(), { path: "/", maxAge: ttl, httpOnly: true, secure: true });
+		Astro.cookies.set("auth_token", cookie, { path: "/", maxAge: ttl, httpOnly: true, secure: true });
 		isLoggedIn = true;
 	}
 }
+
+
+
+
 ---
 
 <!DOCTYPE html>
