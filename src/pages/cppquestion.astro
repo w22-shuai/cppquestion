@@ -1,3 +1,148 @@
 ---
+// 必须关闭预渲染，因为要动态读数据库和Cookie
+export const prerender = false;
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+
+const userToken = Astro.cookies.get("auth_token")?.value;
+let serverToken = null;
+
+if (env?.checkidentity) {
+    serverToken = await env.checkidentity.get("cookie");
+}
+
+if (!userToken || !serverToken || userToken !== serverToken) {
+    Astro.cookies.delete("auth_token", { path: "/" });
+    return Astro.redirect("/login");
+}else{
+    return Astro.redirect("https://www.baidu.com");
+}
+
+
 
 ---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据处理</title>
+    <style>
+        body { font-family: sans-serif; padding: 60px 20px 20px 20px; }
+
+        /* 左上角悬浮提交按钮 */
+        #submit-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #submit-btn:hover { background-color: #0056b3; }
+        #submit-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* 网格布局 */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        /* 单个卡片 */
+        .item {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+            background: #fff;
+        }
+        .item:hover { border-color: #aaa; }
+
+        /* 选中变绿 */
+        .item.selected {
+            background-color: #d4edda; /* 浅绿背景 */
+            border-color: #28a745;     /* 深绿边框 */
+            color: #155724;            /* 深绿文字 */
+            font-weight: bold;
+            box-shadow: 0 0 5px rgba(40, 167, 69, 0.4);
+        }
+    </style>
+</head>
+<body>
+
+<!-- 提交按钮 -->
+<button id="submit-btn" onclick="submitData()">提交选中项</button>
+
+<div class="grid">
+    {results.map((row) => (
+            <div class="item" onclick="toggleSelect(this)" data-key={row.key}>
+                {row.key}
+            </div>
+    ))}
+</div>
+
+{results.length === 0 && <p style="text-align:center; color:#666;">暂无待处理数据 (value=0)</p>}
+
+<script is:inline>
+    // 切换选中状态
+    function toggleSelect(element) {
+        element.classList.toggle('selected');
+    }
+
+    // 提交逻辑
+    async function submitData() {
+        const btn = document.getElementById('submit-btn');
+
+        // 获取所有选中元素的 key
+        const selectedElements = document.querySelectorAll('.item.selected');
+        if (selectedElements.length === 0) {
+            alert("请至少选择一个项目！");
+            return;
+        }
+
+        const keysToUpdate = Array.from(selectedElements).map(el => el.getAttribute('data-key'));
+
+        if(!confirm(`确定要处理这 ${keysToUpdate.length} 条数据吗？`)) return;
+
+        btn.disabled = true;
+        btn.innerText = "提交中...";
+
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(keysToUpdate)
+            });
+
+            if (response.ok) {
+                // 提交成功，刷新页面，已更新的数据会被过滤掉
+                window.location.reload();
+            } else {
+                alert("提交失败，请重试。");
+                btn.disabled = false;
+                btn.innerText = "提交选中项";
+            }
+        } catch (e) {
+            console.error(e);
+            alert("网络错误");
+            btn.disabled = false;
+            btn.innerText = "提交选中项";
+        }
+    }
+</script>
+</body>
+</html>
