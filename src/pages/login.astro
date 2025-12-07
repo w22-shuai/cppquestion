@@ -37,12 +37,9 @@ NafUvvaJZkT2HH6q9VGaGl5x
 async function decryptData(encryptedBase64) {
 	try {
 		// 1. 处理 PEM 格式
-		const pemHeader = "-----BEGIN PRIVATE KEY-----";
-		const pemFooter = "-----END PRIVATE KEY-----";
-		const pemContents = PRIVATE_KEY_PEM.substring(
-			pemHeader.length,
-			PRIVATE_KEY_PEM.length - pemFooter.length
-		).replace(/\s/g, "");
+		const pemContents = PRIVATE_KEY_PEM
+			.replace(/-----[^-]+-----/g, "")
+			.replace(/\s+/g, "");
 
 		// 2. Base64 转 ArrayBuffer
 		const binaryDerString = atob(pemContents);
@@ -354,7 +351,7 @@ cwIDAQAB
 	async function encryptData(data) {
 		try {
 			// 1. 处理 PEM
-			const pemContents = PRIVATE_KEY_PEM
+			const pemContents = PUBLIC_KEY_PEM
 				.replace(/-----[^-]+-----/g, "")
 				.replace(/\s+/g, "");
 
