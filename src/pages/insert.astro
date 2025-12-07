@@ -17,7 +17,7 @@ if ((timenow - timelast) > 86400) {
     return Astro.redirect("/login");
 }
 
-try{
+
     let message = "";
     let status = ""; // "success" | "error"
 
@@ -80,9 +80,7 @@ try{
             status = "error";
         }
     }
-}catch (e) {
-    return Astro.redirect("/login");
-}
+
 ---
 
 <!DOCTYPE html>
