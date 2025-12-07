@@ -1,5 +1,5 @@
 ---
-// 必须关闭预渲染，因为要动态读数据库和Cookie
+// src/pages/cppquestion.astro
 export const prerender = false;
 
 const runtime = Astro.locals.runtime;
@@ -14,14 +14,45 @@ if (env?.checkidentity) {
 }
 
 if (!userToken || !serverToken || userToken !== serverToken) {
+    // 清除无效 Cookie
     Astro.cookies.delete("auth_token", { path: "/" });
     return Astro.redirect("/login");
-}else{
-    return Astro.redirect("https://www.baidu.com");
 }
 
 
 
+// 处理提交 (POST)：把选中的项目 value 改成 1
+if (Astro.request.method === "POST") {
+    try {
+        const selectedKeys = await Astro.request.json();
+        if (selectedKeys && selectedKeys.length > 0) {
+            // 使用 cppquestion 绑定
+            const stmt = env.cppquestion.prepare(
+                "UPDATE [Order] SET value = 1 WHERE key = ?"
+            );
+            const updates = selectedKeys.map(k => stmt.bind(k));
+            await env.cppquestion.batch(updates);
+
+            return new Response(JSON.stringify({ success: true }));
+        }
+    } catch (e) {
+        console.error(e);
+        return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    }
+}
+
+// 获取数据 (GET)：取出所有 value 为 0 的 key
+let results = [];
+try {
+    // 假设表名还是 [Order]，如有变化请修改
+    const d1Response = await env.cppquestion.prepare(
+        "SELECT key FROM [Order] WHERE value = 0 LIMIT 100"
+    ).run();
+    results = d1Response.results || [];
+} catch (e) {
+    console.error("数据库读取错误:", e);
+    // 可以在这里处理错误显示，或者留空
+}
 ---
 
 <!DOCTYPE html>
@@ -29,118 +60,76 @@ if (!userToken || !serverToken || userToken !== serverToken) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数据处理</title>
+    <title>待处理任务</title>
     <style>
-        body { font-family: sans-serif; padding: 60px 20px 20px 20px; }
+        body { font-family: sans-serif; padding: 60px 20px; }
 
-        /* 左上角悬浮提交按钮 */
         #submit-btn {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            padding: 10px 25px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            z-index: 1000;
-            font-size: 16px;
-            font-weight: bold;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: fixed; top: 20px; left: 20px;
+            padding: 10px 20px; background: #007bff; color: #fff;
+            border: none; border-radius: 5px; cursor: pointer;
+            z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        #submit-btn:hover { background-color: #0056b3; }
-        #submit-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        #submit-btn:hover { background: #0056b3; }
+        #submit-btn:disabled { background: #ccc; }
 
-        /* 网格布局 */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
             gap: 15px;
         }
 
-        /* 单个卡片 */
         .item {
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            user-select: none;
-            background: #fff;
+            padding: 15px; border: 1px solid #ddd; border-radius: 6px;
+            text-align: center; cursor: pointer; user-select: none;
+            word-break: break-all;
         }
-        .item:hover { border-color: #aaa; }
 
-        /* 选中变绿 */
         .item.selected {
-            background-color: #d4edda; /* 浅绿背景 */
-            border-color: #28a745;     /* 深绿边框 */
-            color: #155724;            /* 深绿文字 */
-            font-weight: bold;
-            box-shadow: 0 0 5px rgba(40, 167, 69, 0.4);
+            background-color: #d4edda; border-color: #28a745; color: #155724;
         }
     </style>
 </head>
 <body>
 
-<!-- 提交按钮 -->
-<button id="submit-btn" onclick="submitData()">提交选中项</button>
+<button id="submit-btn" onclick="submitData()">提交完成项</button>
+
+<h3>待处理列表 (Value = 0)</h3>
 
 <div class="grid">
     {results.map((row) => (
-            <div class="item" onclick="toggleSelect(this)" data-key={row.key}>
+            <div class="item" onclick="this.classList.toggle('selected')" data-key={row.key}>
                 {row.key}
             </div>
     ))}
 </div>
 
-{results.length === 0 && <p style="text-align:center; color:#666;">暂无待处理数据 (value=0)</p>}
+{results.length === 0 && <p style="color:#666; text-align:center;">没有待处理的数据。</p>}
 
-<script is:inline>
-    // 切换选中状态
-    function toggleSelect(element) {
-        element.classList.toggle('selected');
-    }
-
-    // 提交逻辑
+<script>
     async function submitData() {
         const btn = document.getElementById('submit-btn');
+        const selected = document.querySelectorAll('.item.selected');
 
-        // 获取所有选中元素的 key
-        const selectedElements = document.querySelectorAll('.item.selected');
-        if (selectedElements.length === 0) {
-            alert("请至少选择一个项目！");
-            return;
-        }
+        if (selected.length === 0) return alert("请先选择！");
 
-        const keysToUpdate = Array.from(selectedElements).map(el => el.getAttribute('data-key'));
-
-        if(!confirm(`确定要处理这 ${keysToUpdate.length} 条数据吗？`)) return;
+        const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
 
         btn.disabled = true;
         btn.innerText = "提交中...";
 
         try {
-            const response = await fetch(window.location.href, {
+            const res = await fetch(window.location.href, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(keysToUpdate)
+                body: JSON.stringify(keys)
             });
-
-            if (response.ok) {
-                // 提交成功，刷新页面，已更新的数据会被过滤掉
-                window.location.reload();
-            } else {
-                alert("提交失败，请重试。");
-                btn.disabled = false;
-                btn.innerText = "提交选中项";
-            }
+            if (res.ok) window.location.reload();
+            else alert("提交失败");
         } catch (e) {
-            console.error(e);
-            alert("网络错误");
+            alert("错误");
+        } finally {
             btn.disabled = false;
-            btn.innerText = "提交选中项";
+            btn.innerText = "提交完成项";
         }
     }
 </script>

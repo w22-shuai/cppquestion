@@ -16,17 +16,11 @@ const timenow = Math.floor(Date.now() / 1000);
 let timelast = await env.checkidentity.get("time");
 timelast = timelast ? parseInt(timelast) : 0;
 
-// 2. 检查是否超过 24小时 (86400秒) 或 从未设置过
-if ((timenow - timelast) > 1) {
-	// 生成新的随机 Token
+if ((timenow - timelast) > 86400) {
 	const newToken = crypto.randomUUID();
-
-	// 更新时间
 	await env.checkidentity.put('time', timenow.toString());
-	// 更新 KV 里的 Token (注意：这里存的是 newToken，不是 timenow)
 	await env.checkidentity.put('cookie', newToken);
-
-	console.log("Token 已过期，已刷新为新 Token");
+	//console.log("Token 已过期，已刷新为新 Token");
 }
 
 // 3. 处理表单提交 (POST)
@@ -49,11 +43,8 @@ if (Astro.request.method === "POST") {
 			httpOnly: true,
 			secure: true
 		});
-
-		// 验证成功，跳转到问题页
 		return Astro.redirect("/cppquestion");
 	} else {
-		// 密码错误，可以在这里处理，或者直接让它继续渲染下面的 HTML
 		console.error("密码错误");
 	}
 }
