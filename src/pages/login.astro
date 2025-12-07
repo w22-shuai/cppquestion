@@ -17,7 +17,7 @@ let timelast = await env.checkidentity.get("time");
 timelast = timelast ? parseInt(timelast) : 0;
 
 // 2. 检查是否超过 24小时 (86400秒) 或 从未设置过
-if ((timenow - timelast) > 86400) {
+if ((timenow - timelast) > 1) {
 	// 生成新的随机 Token
 	const newToken = crypto.randomUUID();
 
