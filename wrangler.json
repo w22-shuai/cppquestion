@@ -21,8 +21,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "checkidentity",
-			"id": "checkidentity",
-			"preview_id": "04386210368e460fa494df2318adf6ef"
+			"id": "04386210368e460fa494df2318adf6ef"
 		}
 	]
 }
