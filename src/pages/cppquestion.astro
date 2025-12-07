@@ -1,17 +1,10 @@
 ---
+// src/pages/cppquestion.astro
 export const prerender = false;
 
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
-const timenow = Math.floor(Date.now() / 1000);
 
-let timelast = await env.checkidentity.get("time");
-timelast = timelast ? parseInt(timelast) : 0;
-if ((timenow - timelast) > 86400) {
-    const newToken = crypto.randomUUID();
-    await env.checkidentity.put('time', timenow.toString());
-    await env.checkidentity.put('cookie', newToken);
-}
 // =========================================================
 // 1. 鉴权逻辑
 // =========================================================
@@ -24,20 +17,19 @@ if (env?.checkidentity) {
 
 if (!userToken || !serverToken || userToken !== serverToken) {
     Astro.cookies.delete("auth_token", { path: "/" });
-    // 注意：请确保你的登录页路径正确，是 /login 还是 /blog/login
-    return Astro.redirect("/login");
+    // 请确认你的登录页路径是 /blog/login 还是 /login
+    return Astro.redirect("/blog/login");
 }
 
 // =========================================================
 // 2. 数据库逻辑
 // =========================================================
 
-// POST: 提交修改
+// POST: 提交修改 (将选中的 key 的 value 更新为 1)
 if (Astro.request.method === "POST") {
     try {
         const selectedKeys = await Astro.request.json();
         if (selectedKeys && selectedKeys.length > 0) {
-            // >>> 修改点1：表名改为 cppquestion <<<
             const stmt = env.cppquestion.prepare(
                 "UPDATE cppquestion SET value = 1 WHERE key = ?"
             );
@@ -52,10 +44,9 @@ if (Astro.request.method === "POST") {
     }
 }
 
-// GET: 获取数据
+// GET: 获取数据 (只取 value=0 的)
 let results = [];
 try {
-    // >>> 修改点2：表名改为 cppquestion <<<
     const d1Response = await env.cppquestion.prepare(
         "SELECT key FROM cppquestion WHERE value = 0 LIMIT 100"
     ).run();
@@ -74,68 +65,90 @@ try {
     <style>
         body { font-family: sans-serif; padding: 60px 20px; }
 
+        /* 左上角：提交选中项 (蓝色) */
         #submit-btn {
             position: fixed; top: 20px; left: 20px;
             padding: 10px 20px; background: #007bff; color: #fff;
             border: none; border-radius: 5px; cursor: pointer;
             z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-weight: bold;
         }
         #submit-btn:hover { background: #0056b3; }
         #submit-btn:disabled { background: #ccc; }
 
+        /* 右上角：插入问题 (绿色) */
+        #insert-btn {
+            position: fixed; top: 20px; right: 20px;
+            padding: 10px 20px; background: #28a745; color: #fff;
+            text-decoration: none; border-radius: 5px;
+            z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-weight: bold; font-size: 14px;
+        }
+        #insert-btn:hover { background: #218838; }
+
+        /* 网格布局 */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px;
+            gap: 15px; margin-top: 20px;
         }
 
         .item {
             padding: 15px; border: 1px solid #ddd; border-radius: 6px;
             text-align: center; cursor: pointer; user-select: none;
             word-break: break-all;
-            transition: background 0.2s;
+            background: #fff;
+            transition: all 0.2s;
         }
 
+        /* 选中状态 */
         .item.selected {
             background-color: #d4edda; border-color: #28a745; color: #155724;
+            transform: scale(1.02);
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
         }
     </style>
 </head>
 <body>
 
+<!-- 左上角按钮 -->
 <button id="submit-btn" onclick="submitData()">提交完成项</button>
+
+<!-- 右上角按钮 (新增) -->
+<a href="/insert" id="insert-btn">插入问题 +</a>
 
 <h3>待处理列表 (Value = 0)</h3>
 
 <div class="grid">
     {results.map((row) => (
-        <!-- 这里也用了 onclick="toggleSelect(this)"，所以在下面 script 里也需要全局函数 -->
             <div class="item" onclick="toggleSelect(this)" data-key={row.key}>
                 {row.key}
             </div>
     ))}
 </div>
 
-{results.length === 0 && <p style="color:#666; text-align:center;">没有待处理的数据。</p>}
+{results.length === 0 && <p style="color:#666; text-align:center; margin-top: 50px;">暂无待处理数据。</p>}
 
-<!-- >>> 修改点3：加上 is:inline <<< -->
+<!--
+    重要修复：加上 is:inline
+    这会让脚本在全局作用域运行，submitData 才能被 onclick 找到
+-->
 <script is:inline>
     // 切换选中状态
     function toggleSelect(element) {
         element.classList.toggle('selected');
     }
 
-    // 提交数据
+    // 提交数据逻辑
     async function submitData() {
         const btn = document.getElementById('submit-btn');
         const selected = document.querySelectorAll('.item.selected');
 
         if (selected.length === 0) return alert("请先选择！");
 
-        // 提取 key
         const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
 
-        if(!confirm(`确认处理这 ${keys.length} 条数据吗？`)) return;
+        if(!confirm(`确认标记 ${keys.length} 条数据为已完成吗？`)) return;
 
         btn.disabled = true;
         btn.innerText = "提交中...";
@@ -143,12 +156,12 @@ try {
         try {
             const res = await fetch(window.location.href, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'}, // 最好加上这个头
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(keys)
             });
 
             if (res.ok) {
-                window.location.reload();
+                window.location.reload(); // 刷新页面
             } else {
                 const txt = await res.text();
                 alert("提交失败: " + txt);
