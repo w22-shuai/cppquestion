@@ -5,20 +5,23 @@ const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 const timenow = Math.floor(Date.now() / 1000);
 
+// =========================================================
+// 1. 24小时 Token 轮转逻辑
+// =========================================================
 let timelast = await env.checkidentity.get("time");
 timelast = timelast ? parseInt(timelast) : 0;
 if ((timenow - timelast) > 86400) {
     const newToken = crypto.randomUUID();
     await env.checkidentity.put('time', timenow.toString());
     await env.checkidentity.put('cookie', newToken);
-    return Astro.redirect("/login");
+    return Astro.redirect("/blog/login");
 }
 
 let message = "";
 let status = ""; // "success" | "error"
 
 // =========================================================
-// 1. 鉴权逻辑
+// 2. 鉴权逻辑
 // =========================================================
 const userToken = Astro.cookies.get("auth_token")?.value;
 let serverToken = null;
@@ -27,14 +30,13 @@ if (env?.checkidentity) {
     serverToken = await env.checkidentity.get("cookie");
 }
 
-// 验证失败则跳回登录页
 if (!userToken || !serverToken || userToken !== serverToken) {
     Astro.cookies.delete("auth_token", { path: "/" });
-    return Astro.redirect("/login");
+    return Astro.redirect("/blog/login");
 }
 
 // =========================================================
-// 2. 插入逻辑 (POST)
+// 3. 插入逻辑 (POST) - 已做防注入处理
 // =========================================================
 if (Astro.request.method === "POST") {
     try {
@@ -42,28 +44,30 @@ if (Astro.request.method === "POST") {
         const key = formData.get("key")?.toString().trim();
 
         if (!key) {
-            message = "内容不能为空";
+            message = "⚠️ 内容不能为空";
             status = "error";
         } else {
-            // >>> 核心：插入 key，value 强制设为 0 <<<
+            // >>> 安全核心：防 SQL 注入 <<<
+            // 使用 .bind(key) 而不是字符串拼接。
+            // D1 会自动转义 input，无论 key 里包含什么特殊字符，
+            // 数据库都只会把它当成纯文本，绝对安全。
             const info = await env.cppquestion.prepare(
                 "INSERT INTO cppquestion (key, value) VALUES (?, 0)"
             ).bind(key).run();
 
             if (info.success) {
-                message = `提交成功: ${key}`;
+                message = "✅ 录入成功";
                 status = "success";
             } else {
-                message = "提交失败";
+                message = "❌ 提交失败";
                 status = "error";
             }
         }
     } catch (e) {
-        // 捕获唯一性约束错误 (例如 key 已存在)
         if (e.message.includes("UNIQUE") || e.message.includes("Constraint")) {
-            message = "提交失败：该条目已存在";
+            message = "⚠️ 提交失败：该内容已存在库中";
         } else {
-            message = "系统错误: " + e.message;
+            message = "❌ 系统错误: " + e.message;
         }
         status = "error";
     }
@@ -75,66 +79,218 @@ if (Astro.request.method === "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>录入新数据</title>
+    <title>数据录入终端</title>
     <style>
-        body { font-family: sans-serif; padding: 50px; display: flex; flex-direction: column; align-items: center; }
+        /* ==================== 全局背景 (与列表页一致) ==================== */
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
 
-        /* 导航栏 */
-        .nav { margin-bottom: 20px; font-size: 14px; }
-        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; }
-        .nav a:hover { text-decoration: underline; }
+            /* 背景图 */
+            background-image: url('https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=2069&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
 
-        /* 表单容器 */
+        /* 黑色蒙版 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: -1;
+            backdrop-filter: blur(3px);
+        }
+
+        /* ==================== 导航栏 ==================== */
+        .nav {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-link {
+            color: #00f2ff;
+            text-decoration: none;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 15px;
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            border-radius: 4px;
+            transition: all 0.3s;
+            background: rgba(0,0,0,0.3);
+        }
+        .back-link:hover {
+            background: rgba(0, 242, 255, 0.1);
+            border-color: #00f2ff;
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.4);
+        }
+
+        /* ==================== 主容器 (磨砂玻璃) ==================== */
         .box {
-            border: 1px solid #ccc; padding: 30px; border-radius: 8px;
-            width: 100%; max-width: 400px;
-            background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px; /* 宽度加宽，适合长文本 */
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            box-sizing: border-box;
         }
 
-        h3 { margin-top: 0; text-align: center; color: #333; }
+        h3 {
+            margin-top: 0;
+            text-align: center;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #eee;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 15px;
+        }
 
-        input {
-            width: 100%; padding: 12px; margin: 10px 0 20px 0;
-            box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px;
+        /* ==================== 表单元素 ==================== */
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: #aaa;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* 大文本框 */
+        textarea {
+            width: 100%;
+            min-height: 250px; /* 足够高，适合200字 */
+            padding: 15px;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
             font-size: 16px;
+            font-family: inherit;
+            resize: vertical; /* 允许用户垂直拉伸 */
+            outline: none;
+            transition: all 0.3s;
+            line-height: 1.6;
         }
 
+        textarea:focus {
+            border-color: #0aff60;
+            background: rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 15px rgba(10, 255, 96, 0.2);
+        }
+
+        textarea::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 提交按钮 (绿色脉冲) */
         button {
-            width: 100%; padding: 12px; background: #28a745; color: white;
-            border: none; cursor: pointer; border-radius: 4px; font-size: 16px; font-weight: bold;
+            width: 100%;
+            margin-top: 30px;
+            padding: 15px;
+            background: rgba(10, 255, 96, 0.1);
+            color: #0aff60;
+            border: 1px solid #0aff60;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s;
+            animation: pulse-green 3s infinite;
         }
-        button:hover { background: #218838; }
 
-        /* 消息提示 */
-        .msg {
-            margin-bottom: 20px; padding: 12px; border-radius: 4px;
-            width: 100%; max-width: 400px; text-align: center; box-sizing: border-box;
+        button:hover {
+            background: #0aff60;
+            color: #000;
+            box-shadow: 0 0 20px rgba(10, 255, 96, 0.6);
         }
-        .msg.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .msg.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(10, 255, 96, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(10, 255, 96, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(10, 255, 96, 0); }
+        }
+
+        /* ==================== 消息提示 ==================== */
+        .msg {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            box-sizing: border-box;
+            backdrop-filter: blur(5px);
+            font-weight: bold;
+        }
+        .msg.success {
+            background: rgba(10, 255, 96, 0.1);
+            border: 1px solid #0aff60;
+            color: #0aff60;
+            box-shadow: 0 0 15px rgba(10, 255, 96, 0.2);
+        }
+        .msg.error {
+            background: rgba(255, 50, 50, 0.1);
+            border: 1px solid #ff3232;
+            color: #ff3232;
+            box-shadow: 0 0 15px rgba(255, 50, 50, 0.2);
+        }
+
+        /* 辅助文字 */
+        .hint {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.3);
+            text-align: right;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
 
 <div class="nav">
-    <a href="/cppquestion">← 返回处理列表</a>
-    <span style="color:#ccc">|</span>
-    <span>当前: 录入数据</span>
+    <a href="/cppquestion" class="back-link">
+        &lt; // 返回列表
+    </a>
+    <span style="color: rgba(255,255,255,0.3); font-size: 12px;">SYSTEM::INSERT_MODE</span>
 </div>
 
 {message && <div class={`msg ${status}`}>{message}</div>}
 
 <div class="box">
-    <h3>录入新条目</h3>
-    <p style="font-size: 12px; color: #666; text-align: center; margin-bottom: 20px;">
-        默认状态: 未解决 (Value = 0)
-    </p>
+    <h3>录入新数据</h3>
 
     <form method="POST">
-        <label style="font-weight: bold; display: block; margin-bottom: 5px;">Key 内容</label>
-        <input type="text" name="key" placeholder="请输入要添加的内容..." required autofocus>
+        <label>DATA INPUT BLOCK</label>
 
-        <button type="submit">提交</button>
+        <textarea
+                name="key"
+                placeholder="在此输入内容... (支持换行，200字+)"
+                required
+                autofocus></textarea>
+
+        <div class="hint">STATUS: UNRESOLVED (VALUE=0)</div>
+
+        <button type="submit">执行录入</button>
     </form>
 </div>
 
