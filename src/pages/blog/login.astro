@@ -1,107 +1,105 @@
-export default {
-	async fetch(request, env, ctx) {
-	const url = new URL(request.url);
+---
+// 这里是服务器端运行的代码
+// 必须确保你的 astro.config.mjs 里 output 设置为了 'server'
 
-	// ------------------------------------------------
-    // 1. 处理登录提交 (POST)
-    // ------------------------------------------------
-    if (request.method === "POST" && url.pathname === "/login") {
+let message = "";
+let isLoggedIn = false;
+let currentToken = "";
+
+// 1. 获取 Cloudflare 的环境绑定 (KV 等)
+const runtime = Astro.locals.runtime;
+// 如果本地开发报错找不到 env，可以用可选链 ?.
+const env = runtime?.env;
+
+// 2. 检查当前 Cookie (是否已登录)
+if (Astro.cookies.has("auth_token")) {
+	isLoggedIn = true;
+	currentToken = Astro.cookies.get("auth_token").value;
+}
+
+// 3. 处理 POST 提交 (登录逻辑)
+if (Astro.request.method === "POST") {
 	try {
-		const formData = await request.formData();
+		const formData = await Astro.request.formData();
 		const inputKey = formData.get("key");
 		const inputValue = formData.get("value");
 
-		// 这里是图片中的 Key 和 Value，作为验证凭据
-        const VALID_KEY = "ybysb";
+		const VALID_KEY = "ybysb";
 		const VALID_VALUE = "e5f04750905af0abed99b3b119474ce4";
 
 		if (inputKey === VALID_KEY && inputValue === VALID_VALUE) {
-	// 1. 生成一段随机值 (用于 Session Token)
-          const randomToken = crypto.randomUUID();
+			// 生成 Token
+			const randomToken = crypto.randomUUID();
 
-	// 2. 将 登录态 写入 KV (如你代码要求)
-          // 键是用户名，值是随机Token，设置过期时间(例如1天)
-          await env.checkidentity.put(inputKey, randomToken, { expirationTtl: 86400 });
+			// 写入 KV (注意：必须确保 env 存在且 checkidentity 已绑定)
+			if (env && env.checkidentity) {
+				await env.checkidentity.put(inputKey.toString(), randomToken, { expirationTtl: 86400 });
+			} else {
+				console.error("未找到 checkidentity KV 绑定，请检查 wrangler.toml 或后台配置");
+			}
 
-	// 3. 设置 Cookie 并返回成功信息
-          // Set-Cookie: 名字=值; HttpOnly(防脚本读取); Path=/; Max-Age=(秒)
-          const cookieHeader = `auth_token=${randomToken}; HttpOnly; Secure; Path=/; Max-Age=86400`;
+			// 设置 Cookie
+			Astro.cookies.set("auth_token", randomToken, {
+				httpOnly: true,
+				secure: true,
+				path: "/",
+				maxAge: 86400
+			});
 
-	return new Response("登录成功！随机Token已写入 Cookie 和 KV。", {
-		status: 200,
-		headers: {
-			"Content-Type": "text/html;charset=UTF-8",
-			"Set-Cookie": cookieHeader,
-			// 可以在这里加重定向，比如刷新回主页
-              // "Location": "/"
-            }
-		});
-	} else {
-	return new Response("验证失败：Key 或 Value 错误", { status: 401 });
+			// 登录成功，重定向或者是显示成功消息
+			// return Astro.redirect("/"); // 如果想跳转回首页，取消注释这行
+			message = "登录成功！Cookie 已写入。";
+			isLoggedIn = true;
+			currentToken = randomToken;
+
+		} else {
+			message = "验证失败：账号或密码错误";
+			Astro.response.status = 401;
+		}
+	} catch (error) {
+		message = "发生错误: " + error.message;
+		console.error(error);
 	}
-	} catch (err) {
-	return new Response("Error: " + err.message, { status: 500 });
-	}
-	}
+}
+---
 
-	// ------------------------------------------------
-    // 2. 检查当前是否已登录 (可选逻辑，方便你测试)
-    // ------------------------------------------------
-    const cookie = request.headers.get("Cookie");
-	let isLoggedIn = false;
-	let currentToken = "";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>登录测试</title>
+	<style>
+		body { font-family: sans-serif; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+		.box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; width: 300px; }
+		input { width: 100%; padding: 8px; margin: 5px 0 15px 0; box-sizing: border-box; }
+		button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
+		button:hover { background: #0056b3; }
+		.status { margin-bottom: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; }
+		.success { color: green; font-weight: bold; }
+		.error { color: red; font-weight: bold; }
+	</style>
+</head>
+<body>
 
-	if (cookie && cookie.includes("auth_token=")) {
-	isLoggedIn = true;
-	currentToken = cookie.split("auth_token=")[1].split(";")[0];
-	}
+<div class="status">
+	状态: <span class={isLoggedIn ? "success" : ""}>{isLoggedIn ? "已登录" : "未登录"}</span> <br/>
+	Cookie: {currentToken || '无'}
+	{message && <div class={message.includes("成功") ? "success" : "error"}>{message}</div>}
+</div>
 
-	// ------------------------------------------------
-    // 3. 返回登录页面 (HTML)
-    // ------------------------------------------------
-    const html = `
-      <!DOCTYPE html>
-      <html lang="zh-CN">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Worker 登录测试</title>
-        <style>
-          body { font-family: sans-serif; padding: 40px; display: flex; flex-direction: column; align-items: center; }
-          .box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; width: 300px; }
-          input { width: 100%; padding: 8px; margin: 5px 0 15px 0; box-sizing: border-box; }
-          button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
-          button:hover { background: #0056b3; }
-          .status { margin-bottom: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; }
-          .success { color: green; font-weight: bold; }
-        </style>
-      </head>
-      <body>
+<div class="box">
+	<h3>系统登录</h3>
+	<form method="POST">
+		<label>Key (用户名)</label>
+		<input type="text" name="key" placeholder="请输入 ybysb" required>
 
-        <div class="status">
-          状态: ${isLoggedIn ? `<span class="success">已登录</span>` : '未登录'} <br/>
-          Cookie Token: ${currentToken || '无'}
-        </div>
+		<label>Value (凭证)</label>
+		<input type="password" name="value" placeholder="请输入 e5f0..." required>
 
-        <div class="box">
-          <h3>系统登录</h3>
-          <form action="/login" method="POST">
-            <label>Key (用户名)</label>
-            <input type="text" name="key" placeholder="请输入 ybysb" required>
+		<button type="submit">登录验证</button>
+	</form>
+</div>
 
-            <label>Value (凭证)</label>
-            <input type="password" name="value" placeholder="请输入 e5f0..." required>
-
-            <button type="submit">登录验证</button>
-          </form>
-        </div>
-
-      </body>
-      </html>
-    `;
-
-	return new Response(html, {
-	headers: { "Content-Type": "text/html;charset=UTF-8" },
-	});
-	},
-	};
+</body>
+</html>
