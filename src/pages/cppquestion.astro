@@ -31,18 +31,21 @@ if (!userToken || !serverToken || userToken !== serverToken) {
 }
 
 // =========================================================
-// 2. 数据库逻辑 (保持不变)
+// 2. 数据库逻辑 (已修改：使用 ID 操作)
 // =========================================================
 
 // POST: 提交修改
 if (Astro.request.method === "POST") {
     try {
-        const selectedKeys = await Astro.request.json();
-        if (selectedKeys && selectedKeys.length > 0) {
+        // 前端现在发送的是 ID 数组，而不是 key 字符串数组
+        const selectedIds = await Astro.request.json();
+
+        if (selectedIds && selectedIds.length > 0) {
+            // [修改点] WHERE 子句改为 id = ?
             const stmt = env.cppquestion.prepare(
-                "UPDATE cppquestion SET value = 1 WHERE key = ?"
+                "UPDATE cppquestion SET value = 1 WHERE id = ?"
             );
-            const updates = selectedKeys.map(k => stmt.bind(k));
+            const updates = selectedIds.map(id => stmt.bind(id));
             await env.cppquestion.batch(updates);
             return new Response(JSON.stringify({ success: true }));
         }
@@ -54,8 +57,9 @@ if (Astro.request.method === "POST") {
 // GET: 获取数据
 let results = [];
 try {
+    // [修改点] SELECT 增加 id 字段
     const d1Response = await env.cppquestion.prepare(
-        "SELECT key FROM cppquestion WHERE value = 0 LIMIT 100"
+        "SELECT id, key FROM cppquestion WHERE value = 0 LIMIT 100"
     ).run();
     results = d1Response.results || [];
 } catch (e) {
@@ -78,24 +82,20 @@ try {
             color: #fff;
             min-height: 100vh;
             box-sizing: border-box;
-
-            /* >>> 在这里替换你的壁纸 URL <<< */
             background-image: url('https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=2069&auto=format&fit=crop');
-
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
             background-repeat: no-repeat;
         }
 
-        /* 黑色半透明蒙版，让文字看清 */
         body::before {
             content: '';
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.75); /* 调节 0.75 可以改变背景黑度 */
+            background: rgba(0, 0, 0, 0.75);
             z-index: -1;
-            backdrop-filter: blur(3px); /* 给背景一点点模糊 */
+            backdrop-filter: blur(3px);
         }
 
         h3 {
@@ -121,7 +121,7 @@ try {
             color: #fff;
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid;
-            border-radius: 4px; /*稍微圆角*/
+            border-radius: 4px;
             cursor: pointer;
             z-index: 1000;
             font-weight: 600;
@@ -134,12 +134,10 @@ try {
             font-size: 14px;
         }
 
-        /* 左侧提交按钮 (青蓝色系) */
         #submit-btn {
             left: 30px;
             border-color: #00f2ff;
             color: #00f2ff;
-            /* 动态脉冲动画：3秒一次 */
             animation: pulse-cyan 3s infinite;
         }
         #submit-btn:hover {
@@ -154,7 +152,6 @@ try {
             cursor: not-allowed;
         }
 
-        /* 右侧插入按钮 (荧光绿色系) */
         #insert-btn {
             right: 30px;
             border-color: #0aff60;
@@ -167,10 +164,9 @@ try {
             text-shadow: 0 0 5px #0aff60;
         }
 
-        /* ==================== 脉冲动画 Keyframes ==================== */
         @keyframes pulse-cyan {
             0% { box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(0, 242, 255, 0); } /* 扩散并消失 */
+            50% { box-shadow: 0 0 0 10px rgba(0, 242, 255, 0); }
             100% { box-shadow: 0 0 0 0 rgba(0, 242, 255, 0); }
         }
 
@@ -191,7 +187,7 @@ try {
 
         .item {
             padding: 20px;
-            background: rgba(255, 255, 255, 0.05); /* 极淡的背景 */
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             text-align: center;
@@ -202,18 +198,18 @@ try {
             position: relative;
             overflow: hidden;
             font-size: 15px;
+            /* 增加一点 padding 顶部给 ID 显示留空间 */
+            padding-top: 30px;
         }
 
-        /* 悬停效果 */
         .item:hover {
             border-color: rgba(255, 255, 255, 0.5);
             background: rgba(255, 255, 255, 0.1);
             transform: translateY(-2px);
         }
 
-        /* 选中状态 (高亮) */
         .item.selected {
-            background: rgba(10, 255, 96, 0.15); /* 绿色背景 */
+            background: rgba(10, 255, 96, 0.15);
             border-color: #0aff60;
             color: #0aff60;
             box-shadow: 0 0 15px rgba(10, 255, 96, 0.3) inset, 0 0 10px rgba(10, 255, 96, 0.3);
@@ -221,7 +217,6 @@ try {
             font-weight: bold;
         }
 
-        /* 选中时的左上角小角标装饰 */
         .item.selected::after {
             content: '';
             position: absolute;
@@ -229,6 +224,19 @@ try {
             width: 0; height: 0;
             border-top: 15px solid #0aff60;
             border-right: 15px solid transparent;
+        }
+
+        /* [新增] 显示序号 ID 的小样式 */
+        .id-badge {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            font-family: monospace;
+        }
+        .item.selected .id-badge {
+            color: #0aff60;
         }
 
         .empty-msg {
@@ -242,17 +250,16 @@ try {
 </head>
 <body>
 
-<!-- 加上 class hud-btn -->
 <button id="submit-btn" class="hud-btn">提交完成项</button>
-
-<!-- 加上 class hud-btn -->
 <a href="/insert" id="insert-btn" class="hud-btn">插入问题</a>
 
 <h3>待处理任务列表</h3>
 
 <div class="grid">
     {results.map((row) => (
-            <div class="item" data-key={row.key}>
+        /* [修改点] 将 ID 绑定到 data-id */
+            <div class="item" data-id={row.id}>
+                <span class="id-badge">#{row.id}</span>
                 {row.key}
             </div>
     ))}
@@ -260,9 +267,6 @@ try {
 
 {results.length === 0 && <p class="empty-msg">:: 系统检测无待处理数据 ::</p>}
 
-<!--
-  JS 逻辑完全保持不变，确保功能正常
--->
 <script is:inline>
     document.addEventListener('DOMContentLoaded', () => {
         const items = document.querySelectorAll('.item');
@@ -278,14 +282,14 @@ try {
                 const selected = document.querySelectorAll('.item.selected');
 
                 if (selected.length === 0) {
-                    // 自定义一点的 alert (这里还是用系统默认的)
                     alert("⚠️ 操作提示：请至少选择一个项目！");
                     return;
                 }
 
-                const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
+                // [修改点] 获取 data-id 而不是 data-key
+                const ids = Array.from(selected).map(el => el.getAttribute('data-id'));
 
-                if(!confirm(`[系统确认] 标记 ${keys.length} 条数据为已完成？`)) return;
+                if(!confirm(`[系统确认] 标记 ${ids.length} 条数据为已完成？`)) return;
 
                 btn.disabled = true;
                 btn.innerText = "PROCESSING...";
@@ -294,7 +298,7 @@ try {
                     const res = await fetch(window.location.href, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(keys)
+                        body: JSON.stringify(ids) // [修改点] 发送 ID 数组
                     });
 
                     if (res.ok) {
