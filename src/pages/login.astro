@@ -109,7 +109,8 @@ try{if (Astro.request.method === "POST") {
 	// 2. 校验账号密码
 	// 用户名: ybysb
 	// 密码: e5f04750905af0abed99b3b119474ce4
-	if (key === "ybysb" && decryptedValue === "WHHR208020..") {
+	let passwd =await env.checkidentity.get('wangshuai')
+	if (key === "wangshuai" && decryptedValue === passwd) {
 
 		if (env?.checkidentity) {
 			const validToken = await env.checkidentity.get('cookie');
