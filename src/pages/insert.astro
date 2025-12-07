@@ -14,7 +14,7 @@ if ((timenow - timelast) > 86400) {
     const newToken = crypto.randomUUID();
     await env.checkidentity.put('time', timenow.toString());
     await env.checkidentity.put('cookie', newToken);
-    return Astro.redirect("/blog/login");
+    return Astro.redirect("/login");
 }
 
 let message = "";

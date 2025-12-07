@@ -4,54 +4,122 @@ export const prerender = false;
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 
-// 防止本地开发报错
-if (!env || !env.checkidentity) {
-	throw new Error("请确保 wrangler.toml 绑定了 checkidentity KV");
-}
+// =================================================================
+// 1. RSA 私钥 (后端解密用) - 请勿泄露
+// =================================================================
+const PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEA13+t74uJ/6aXjQ5q
+z+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
+qJ5qJwIDAQABAkAz+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
+qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJAiEA/wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5
+qJ5qJ5qJ5qJ5qJ8CIQD+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5wIh
+ANd/re+Lif+ml40Oas/oxfm2eHfMBaubY+WeaieaieaiAiEA/wFq5tj5Z5qJ5qJ5
+qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ8CIQD+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5
+qJ5qJ5qJ5w==
+-----END PRIVATE KEY-----`;
 
-const timenow = Math.floor(Date.now() / 1000);
+// --- 后端 RSA 解密工具函数 ---
+async function decryptData(encryptedBase64) {
+	try {
+		// 1. 处理 PEM 格式
+		const pemHeader = "-----BEGIN PRIVATE KEY-----";
+		const pemFooter = "-----END PRIVATE KEY-----";
+		const pemContents = PRIVATE_KEY_PEM.substring(
+			pemHeader.length,
+			PRIVATE_KEY_PEM.length - pemFooter.length
+		).replace(/\s/g, "");
 
-// 1. 获取上次更新 Token 的时间
-// 注意：从 KV 取出来的是字符串，要转数字
-let timelast = await env.checkidentity.get("time");
-timelast = timelast ? parseInt(timelast) : 0;
+		// 2. Base64 转 ArrayBuffer
+		const binaryDerString = atob(pemContents);
+		const binaryDer = new Uint8Array(binaryDerString.length);
+		for (let i = 0; i < binaryDerString.length; i++) {
+			binaryDer[i] = binaryDerString.charCodeAt(i);
+		}
 
-if ((timenow - timelast) > 86400) {
-	const newToken = crypto.randomUUID();
-	await env.checkidentity.put('time', timenow.toString());
-	await env.checkidentity.put('cookie', newToken);
-	//console.log("Token 已过期，已刷新为新 Token");
-}
+		// 3. 导入私钥
+		const privateKey = await crypto.subtle.importKey(
+			"pkcs8",
+			binaryDer.buffer,
+			{ name: "RSA-OAEP", hash: "SHA-256" },
+			false,
+			["decrypt"]
+		);
 
-// 3. 处理表单提交 (POST)
-if (Astro.request.method === "POST") {
-	const formData = await Astro.request.formData();
-	const key = formData.get("key");
-	const value = formData.get("value");
+		// 4. 解密
+		const encryptedData = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+		const decryptedBuffer = await crypto.subtle.decrypt(
+			{ name: "RSA-OAEP" },
+			privateKey,
+			encryptedData
+		);
 
-	// 硬编码校验账号密码
-	if (key === "ybysb" && value === "e5f04750905af0abed99b3b119474ce4") {
-		// 从 KV 获取当前有效的 Token
-		// 修正：这里用 env.checkidentity，不要用 env.KV
-		const validToken = await env.checkidentity.get('cookie');
-
-		// 设置 Cookie
-		const ttl = 86400;
-		Astro.cookies.set("auth_token", validToken, {
-			path: "/",
-			maxAge: ttl,
-			httpOnly: true,
-			secure: true
-		});
-		return Astro.redirect("/cppquestion");
-	} else {
-		console.error("密码错误");
+		// 5. ArrayBuffer 转字符串
+		return new TextDecoder().decode(decryptedBuffer);
+	} catch (e) {
+		console.error("解密失败:", e);
+		return null;
 	}
 }
 
-// 4. 处理 GET 请求
-// 不需要写 if (GET) redirect，
-// 代码执行到这里如果没有 return，就会自动渲染下面的 HTML，这样用户就能看到表单了。
+
+// =================================================================
+// 2. 24小时 Token 轮转逻辑 (保持原有逻辑)
+// =================================================================
+// 防止本地开发报错
+if (!env || !env.checkidentity) {
+	// throw new Error("请确保 wrangler.toml 绑定了 checkidentity KV");
+	// 为了不让页面挂掉，本地开发时这里不抛错，只是不能登录
+} else {
+	const timenow = Math.floor(Date.now() / 1000);
+	let timelast = await env.checkidentity.get("time");
+	timelast = timelast ? parseInt(timelast) : 0;
+
+	if ((timenow - timelast) > 86400) {
+		const newToken = crypto.randomUUID();
+		await env.checkidentity.put('time', timenow.toString());
+		await env.checkidentity.put('cookie', newToken);
+	}
+}
+
+let errorMsg = "";
+
+// =================================================================
+// 3. 处理表单提交 (POST)
+// =================================================================
+if (Astro.request.method === "POST") {
+	const formData = await Astro.request.formData();
+	const key = formData.get("key"); // 用户名 (明文)
+	const encryptedValue = formData.get("encrypted_value"); // 密码 (RSA加密过的)
+
+	// 1. 解密密码
+	let decryptedValue = null;
+	if (encryptedValue) {
+		decryptedValue = await decryptData(encryptedValue.toString());
+	}
+
+	// 2. 校验账号密码
+	// 用户名: ybysb
+	// 密码: e5f04750905af0abed99b3b119474ce4
+	if (key === "ybysb" && decryptedValue === "e5f04750905af0abed99b3b119474ce4") {
+
+		if (env?.checkidentity) {
+			const validToken = await env.checkidentity.get('cookie');
+			// 设置 Cookie
+			Astro.cookies.set("auth_token", validToken, {
+				path: "/",
+				maxAge: 86400,
+				httpOnly: true,
+				secure: true
+			});
+			return Astro.redirect("/cppquestion");
+		} else {
+			errorMsg = "环境错误：无法连接鉴权数据库";
+		}
+	} else {
+		errorMsg = "⚠️ 验证失败：账号或密码错误";
+		// 如果解密失败，decryptedValue 为 null，也会走这里
+	}
+}
 ---
 
 <!DOCTYPE html>
@@ -59,17 +127,301 @@ if (Astro.request.method === "POST") {
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Login</title>
+	<title>SYSTEM LOGIN</title>
+	<style>
+		/* ==================== 全局背景 (Cyberpunk 风格) ==================== */
+		body {
+			font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+			margin: 0;
+			padding: 0;
+			color: #fff;
+			height: 100vh;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			background-color: #000;
+			overflow: hidden;
+
+			/* 背景图 */
+			background-image: url('https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=2069&auto=format&fit=crop');
+			background-size: cover;
+			background-position: center;
+		}
+
+		/* 黑色蒙版 */
+		body::before {
+			content: '';
+			position: absolute;
+			top: 0; left: 0; right: 0; bottom: 0;
+			background: rgba(0, 0, 0, 0.6);
+			backdrop-filter: blur(5px);
+			z-index: 1;
+		}
+
+		/* ==================== 登录框容器 ==================== */
+		.login-box {
+			position: relative;
+			z-index: 10;
+			width: 100%;
+			max-width: 400px;
+			padding: 40px;
+			background: rgba(255, 255, 255, 0.05);
+			border: 1px solid rgba(255, 255, 255, 0.1);
+			border-radius: 12px;
+			box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+			backdrop-filter: blur(15px);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+
+		/* 装饰性边框 */
+		.login-box::after {
+			content: '';
+			position: absolute;
+			top: -2px; left: -2px; right: -2px; bottom: -2px;
+			background: linear-gradient(45deg, #00f2ff, transparent, #0aff60, transparent);
+			z-index: -1;
+			border-radius: 14px;
+			animation: border-rotate 4s linear infinite;
+			opacity: 0.3;
+		}
+
+		h2 {
+			margin: 0 0 30px 0;
+			font-weight: 300;
+			letter-spacing: 4px;
+			color: #fff;
+			text-transform: uppercase;
+			text-shadow: 0 0 10px rgba(255,255,255,0.5);
+		}
+
+		/* ==================== 表单元素 ==================== */
+		form {
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			gap: 20px;
+		}
+
+		.input-group {
+			position: relative;
+		}
+
+		input {
+			width: 100%;
+			padding: 15px;
+			box-sizing: border-box;
+			background: rgba(0, 0, 0, 0.4);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			border-radius: 6px;
+			color: #fff;
+			font-size: 16px;
+			outline: none;
+			transition: all 0.3s;
+			letter-spacing: 1px;
+		}
+
+		input:focus {
+			border-color: #00f2ff;
+			background: rgba(0, 0, 0, 0.6);
+			box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+		}
+
+		input::placeholder {
+			color: rgba(255, 255, 255, 0.3);
+			text-transform: uppercase;
+			font-size: 12px;
+		}
+
+		button {
+			padding: 15px;
+			background: rgba(0, 242, 255, 0.1);
+			color: #00f2ff;
+			border: 1px solid #00f2ff;
+			border-radius: 6px;
+			font-size: 16px;
+			font-weight: bold;
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			cursor: pointer;
+			transition: all 0.3s;
+			margin-top: 10px;
+			position: relative;
+			overflow: hidden;
+		}
+
+		button:hover {
+			background: #00f2ff;
+			color: #000;
+			box-shadow: 0 0 30px rgba(0, 242, 255, 0.6);
+		}
+
+		.error-msg {
+			color: #ff4d4d;
+			font-size: 14px;
+			margin-bottom: 20px;
+			text-align: center;
+			background: rgba(255, 0, 0, 0.1);
+			padding: 10px;
+			border-radius: 4px;
+			border: 1px solid rgba(255, 0, 0, 0.3);
+			width: 100%;
+			box-sizing: border-box;
+		}
+
+		/* 加载动画 */
+		.loader {
+			display: none;
+			width: 20px;
+			height: 20px;
+			border: 3px solid rgba(255,255,255,0.3);
+			border-radius: 50%;
+			border-top-color: #fff;
+			animation: spin 1s ease-in-out infinite;
+			position: absolute;
+			left: 50%; top: 50%;
+			margin-left: -13px; margin-top: -13px;
+		}
+
+		button.loading {
+			color: transparent;
+		}
+		button.loading .loader {
+			display: block;
+		}
+
+		@keyframes spin { to { transform: rotate(360deg); } }
+		@keyframes border-rotate {
+			0% { filter: hue-rotate(0deg); }
+			100% { filter: hue-rotate(360deg); }
+		}
+
+	</style>
 </head>
-<body style="padding: 50px; display: flex; flex-direction: column; align-items: center;">
+<body>
 
-<h3>系统登录</h3>
+<div class="login-box">
+	<h2>Access Control</h2>
 
-<form method="POST" style="display: flex; flex-direction: column; gap: 10px; width: 300px;">
-	<input type="text" name="key" placeholder="Key" required>
-	<input type="password" name="value" placeholder="Value" required>
-	<button type="submit">提交</button>
-</form>
+	{errorMsg && <div class="error-msg">{errorMsg}</div>}
+
+	<form id="loginForm" method="POST">
+		<div class="input-group">
+			<input type="text" name="key" placeholder="Identity Key" required autocomplete="off">
+		</div>
+
+		<div class="input-group">
+			<input type="password" id="raw_password" placeholder="Passcode" required>
+			<!-- 这是一个隐藏的输入框，用于存放加密后的密码，发送给服务器 -->
+			<input type="hidden" name="encrypted_value" id="encrypted_value">
+		</div>
+
+		<button type="submit" id="submitBtn">
+			Initialize
+			<div class="loader"></div>
+		</button>
+	</form>
+</div>
+
+<!--
+    =================================================================
+    RSA 公钥 (前端加密用)
+    =================================================================
+-->
+<script is:inline>
+	const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MIIBUuAgEANBgkqhkiG9w0BAQEFAASCATowggE6AgEAAkEA13+t74uJ/6aXjQ5q
+z+jF+bZ4d8wFq5tj5Z5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5qJ5
+qJ5qJwIDAQAB
+-----END PUBLIC KEY-----`;
+
+	// --- 前端 RSA 加密工具函数 ---
+	async function encryptData(data) {
+		try {
+			// 1. 处理 PEM
+			const pemHeader = "-----BEGIN PUBLIC KEY-----";
+			const pemFooter = "-----END PUBLIC KEY-----";
+			const pemContents = PUBLIC_KEY_PEM.substring(
+				pemHeader.length,
+				PUBLIC_KEY_PEM.length - pemFooter.length
+			).replace(/\s/g, "");
+
+			// 2. Base64 转 ArrayBuffer
+			const binaryDerString = atob(pemContents);
+			const binaryDer = new Uint8Array(binaryDerString.length);
+			for (let i = 0; i < binaryDerString.length; i++) {
+				binaryDer[i] = binaryDerString.charCodeAt(i);
+			}
+
+			// 3. 导入公钥
+			const key = await window.crypto.subtle.importKey(
+				"spki",
+				binaryDer.buffer,
+				{ name: "RSA-OAEP", hash: "SHA-256" },
+				false,
+				["encrypt"]
+			);
+
+			// 4. 加密
+			const encoder = new TextEncoder();
+			const encodedData = encoder.encode(data);
+			const encryptedBuffer = await window.crypto.subtle.encrypt(
+				{ name: "RSA-OAEP" },
+				key,
+				encodedData
+			);
+
+			// 5. 转 Base64
+			let binary = '';
+			const bytes = new Uint8Array(encryptedBuffer);
+			const len = bytes.byteLength;
+			for (let i = 0; i < len; i++) {
+				binary += String.fromCharCode(bytes[i]);
+			}
+			return btoa(binary);
+
+		} catch (e) {
+			console.error("加密失败:", e);
+			alert("加密模块初始化失败，请使用现代浏览器");
+			return null;
+		}
+	}
+
+	// --- 表单提交拦截 ---
+	const form = document.getElementById('loginForm');
+	const rawPassInput = document.getElementById('raw_password');
+	const encryptedInput = document.getElementById('encrypted_value');
+	const btn = document.getElementById('submitBtn');
+
+	if (form) {
+		form.addEventListener('submit', async (e) => {
+			e.preventDefault(); // 阻止默认提交
+
+			const password = rawPassInput.value;
+			if (!password) return;
+
+			btn.classList.add('loading'); // 显示加载动画
+			btn.disabled = true;
+
+			// 执行加密
+			const encrypted = await encryptData(password);
+
+			if (encrypted) {
+				// 将加密后的乱码放入隐藏的 input
+				encryptedInput.value = encrypted;
+				// 清空原始密码框 (防止明文传输)
+				rawPassInput.value = ""; // 可选：实际上提交后页面就刷新了，不清也没事，但为了安全
+
+				// 此时再真正提交表单
+				form.submit();
+			} else {
+				btn.classList.remove('loading');
+				btn.disabled = false;
+			}
+		});
+	}
+</script>
 
 </body>
 </html>
