@@ -18,51 +18,55 @@ if ((timenow - timelast) > 86400) {
 // =========================================================
 // 1. 鉴权逻辑
 // =========================================================
-const userToken = Astro.cookies.get("auth_token")?.value;
-let serverToken = null;
+try{
+    const userToken = Astro.cookies.get("auth_token")?.value;
+    let serverToken = null;
 
-if (env?.checkidentity) {
-    serverToken = await env.checkidentity.get("cookie");
-}
+    if (env?.checkidentity) {
+        serverToken = await env.checkidentity.get("cookie");
+    }
 
-if (!userToken || !serverToken || userToken !== serverToken) {
-    Astro.cookies.delete("auth_token", { path: "/" });
-    return Astro.redirect("/login");
-}
+    if (!userToken || !serverToken || userToken !== serverToken) {
+        Astro.cookies.delete("auth_token", { path: "/" });
+        return Astro.redirect("/login");
+    }
 
 // =========================================================
 // 2. 数据库逻辑
 // =========================================================
 
 // POST: 提交修改 (保持不变)
-if (Astro.request.method === "POST") {
-    try {
-        const selectedIds = await Astro.request.json();
-        if (selectedIds && selectedIds.length > 0) {
-            const stmt = env.cppquestion.prepare(
-                "UPDATE cppquestion SET value = 1 WHERE id = ?"
-            );
-            const updates = selectedIds.map(id => stmt.bind(id));
-            await env.cppquestion.batch(updates);
-            return new Response(JSON.stringify({ success: true }));
+    if (Astro.request.method === "POST") {
+        try {
+            const selectedIds = await Astro.request.json();
+            if (selectedIds && selectedIds.length > 0) {
+                const stmt = env.cppquestion.prepare(
+                    "UPDATE cppquestion SET value = 1 WHERE id = ?"
+                );
+                const updates = selectedIds.map(id => stmt.bind(id));
+                await env.cppquestion.batch(updates);
+                return new Response(JSON.stringify({ success: true }));
+            }
+        } catch (e) {
+            return new Response(JSON.stringify({ error: e.message }), { status: 500 });
         }
-    } catch (e) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500 });
     }
-}
 
 // GET: 获取数据 (>>> 核心修改点 <<<)
-let results = [];
-try {
-    // 错误写法: .run()
-    // 正确写法: .all()
-    const d1Response = await env.cppquestion.prepare(
-        "SELECT id, key FROM cppquestion WHERE value = 0 LIMIT 100"
-    ).all(); // <--- 改成了 .all()
+    let results = [];
+    try {
+        // 错误写法: .run()
+        // 正确写法: .all()
+        const d1Response = await env.cppquestion.prepare(
+            "SELECT id, key FROM cppquestion WHERE value = 0 LIMIT 100"
+        ).all(); // <--- 改成了 .all()
 
-    results = d1Response.results || [];
-} catch (e) {
-    console.error("数据库读取错误:", e);
+        results = d1Response.results || [];
+    } catch (e) {
+        console.error("数据库读取错误:", e);
+    }
+}catch (e) {
+    return Astro.redirect("/login");
 }
 ---
 

@@ -17,67 +17,71 @@ if ((timenow - timelast) > 86400) {
     return Astro.redirect("/login");
 }
 
-let message = "";
-let status = ""; // "success" | "error"
+try{
+    let message = "";
+    let status = ""; // "success" | "error"
 
 // =========================================================
 // 2. 鉴权逻辑
 // =========================================================
-const userToken = Astro.cookies.get("auth_token")?.value;
-let serverToken = null;
+    const userToken = Astro.cookies.get("auth_token")?.value;
+    let serverToken = null;
 
-if (env?.checkidentity) {
-    serverToken = await env.checkidentity.get("cookie");
-}
+    if (env?.checkidentity) {
+        serverToken = await env.checkidentity.get("cookie");
+    }
 
-if (!userToken || !serverToken || userToken !== serverToken) {
-    Astro.cookies.delete("auth_token", { path: "/" });
-    return Astro.redirect("/login"); // 确保这里重定向路径是你想要的
-}
+    if (!userToken || !serverToken || userToken !== serverToken) {
+        Astro.cookies.delete("auth_token", { path: "/" });
+        return Astro.redirect("/login"); // 确保这里重定向路径是你想要的
+    }
 
 // =========================================================
 // 3. 插入逻辑 (POST) - [核心修改]
 // =========================================================
-if (Astro.request.method === "POST") {
-    try {
-        const formData = await Astro.request.formData();
-        const key = formData.get("key")?.toString().trim();
+    if (Astro.request.method === "POST") {
+        try {
+            const formData = await Astro.request.formData();
+            const key = formData.get("key")?.toString().trim();
 
-        if (!key) {
-            message = "⚠️ 内容不能为空";
-            status = "error";
-        } else {
-            // [修改说明]
-            // 1. SQL 语句保持不变：INSERT INTO ... VALUES (?, 0)
-            //    因为 id 是 AUTOINCREMENT，数据库会自动生成，不需要在这里写 id
-            const stmt = env.cppquestion.prepare(
-                "INSERT INTO cppquestion (key, value) VALUES (?, 0)"
-            );
-
-            const info = await stmt.bind(key).run();
-
-            if (info.success) {
-                // 2. [新增] 获取新生成的 ID
-                // D1 的 run() 返回结果包含 meta.last_row_id
-                const newId = info.meta?.last_row_id ?? "?";
-
-                message = `✅ 录入成功 [ID: #${newId}]`;
-                status = "success";
-            } else {
-                message = "❌ 提交失败 (D1 Error)";
+            if (!key) {
+                message = "⚠️ 内容不能为空";
                 status = "error";
+            } else {
+                // [修改说明]
+                // 1. SQL 语句保持不变：INSERT INTO ... VALUES (?, 0)
+                //    因为 id 是 AUTOINCREMENT，数据库会自动生成，不需要在这里写 id
+                const stmt = env.cppquestion.prepare(
+                    "INSERT INTO cppquestion (key, value) VALUES (?, 0)"
+                );
+
+                const info = await stmt.bind(key).run();
+
+                if (info.success) {
+                    // 2. [新增] 获取新生成的 ID
+                    // D1 的 run() 返回结果包含 meta.last_row_id
+                    const newId = info.meta?.last_row_id ?? "?";
+
+                    message = `✅ 录入成功 [ID: #${newId}]`;
+                    status = "success";
+                } else {
+                    message = "❌ 提交失败 (D1 Error)";
+                    status = "error";
+                }
             }
+        } catch (e) {
+            // 捕获唯一性约束或其他错误
+            if (e.message && (e.message.includes("UNIQUE") || e.message.includes("Constraint"))) {
+                message = "⚠️ 提交失败：该内容已存在库中";
+            } else {
+                console.error(e);
+                message = "❌ 系统错误: " + e.message;
+            }
+            status = "error";
         }
-    } catch (e) {
-        // 捕获唯一性约束或其他错误
-        if (e.message && (e.message.includes("UNIQUE") || e.message.includes("Constraint"))) {
-            message = "⚠️ 提交失败：该内容已存在库中";
-        } else {
-            console.error(e);
-            message = "❌ 系统错误: " + e.message;
-        }
-        status = "error";
     }
+}catch (e) {
+    return Astro.redirect("/login");
 }
 ---
 
