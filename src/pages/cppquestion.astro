@@ -37,7 +37,7 @@ if (Astro.request.method === "POST") {
         const selectedKeys = await Astro.request.json();
         if (selectedKeys && selectedKeys.length > 0) {
             const stmt = env.cppquestion.prepare(
-                "UPDATE [Order] SET value = 1 WHERE key = ?"
+                "UPDATE cppquestion SET value = 1 WHERE key = ?"
             );
             const updates = selectedKeys.map(k => stmt.bind(k));
             await env.cppquestion.batch(updates);
@@ -55,7 +55,7 @@ let results = [];
 try {
     // 假设表名还是 [Order]，如有变化请修改
     const d1Response = await env.cppquestion.prepare(
-        "SELECT key FROM [Order] WHERE value = 0 LIMIT 100"
+        "SELECT key FROM cppquestion WHERE value = 0 LIMIT 100"
     ).run();
     results = d1Response.results || [];
 } catch (e) {
