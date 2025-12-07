@@ -1,5 +1,4 @@
 ---
-// src/pages/cppquestion.astro
 export const prerender = false;
 
 const runtime = Astro.locals.runtime;
@@ -17,7 +16,6 @@ if (env?.checkidentity) {
 
 if (!userToken || !serverToken || userToken !== serverToken) {
     Astro.cookies.delete("auth_token", { path: "/" });
-    // 请确认你的登录页路径是 /blog/login 还是 /login
     return Astro.redirect("/blog/login");
 }
 
@@ -25,7 +23,7 @@ if (!userToken || !serverToken || userToken !== serverToken) {
 // 2. 数据库逻辑
 // =========================================================
 
-// POST: 提交修改 (将选中的 key 的 value 更新为 1)
+// POST: 提交修改
 if (Astro.request.method === "POST") {
     try {
         const selectedKeys = await Astro.request.json();
@@ -35,16 +33,14 @@ if (Astro.request.method === "POST") {
             );
             const updates = selectedKeys.map(k => stmt.bind(k));
             await env.cppquestion.batch(updates);
-
             return new Response(JSON.stringify({ success: true }));
         }
     } catch (e) {
-        console.error(e);
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
     }
 }
 
-// GET: 获取数据 (只取 value=0 的)
+// GET: 获取数据
 let results = [];
 try {
     const d1Response = await env.cppquestion.prepare(
@@ -65,7 +61,6 @@ try {
     <style>
         body { font-family: sans-serif; padding: 60px 20px; }
 
-        /* 左上角：提交选中项 (蓝色) */
         #submit-btn {
             position: fixed; top: 20px; left: 20px;
             padding: 10px 20px; background: #007bff; color: #fff;
@@ -76,7 +71,6 @@ try {
         #submit-btn:hover { background: #0056b3; }
         #submit-btn:disabled { background: #ccc; }
 
-        /* 右上角：插入问题 (绿色) */
         #insert-btn {
             position: fixed; top: 20px; right: 20px;
             padding: 10px 20px; background: #28a745; color: #fff;
@@ -86,7 +80,6 @@ try {
         }
         #insert-btn:hover { background: #218838; }
 
-        /* 网格布局 */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -101,7 +94,6 @@ try {
             transition: all 0.2s;
         }
 
-        /* 选中状态 */
         .item.selected {
             background-color: #d4edda; border-color: #28a745; color: #155724;
             transform: scale(1.02);
@@ -111,17 +103,17 @@ try {
 </head>
 <body>
 
-<!-- 左上角按钮 -->
-<button id="submit-btn" onclick="submitData()">提交完成项</button>
+<!-- 注意：删掉了 onclick="submitData()" -->
+<button id="submit-btn">提交完成项</button>
 
-<!-- 右上角按钮 (新增) -->
 <a href="/insert" id="insert-btn">插入问题 +</a>
 
 <h3>待处理列表 (Value = 0)</h3>
 
 <div class="grid">
     {results.map((row) => (
-            <div class="item" onclick="toggleSelect(this)" data-key={row.key}>
+        <!-- 注意：删掉了 onclick="toggleSelect(this)" -->
+            <div class="item" data-key={row.key}>
                 {row.key}
             </div>
     ))}
@@ -130,51 +122,63 @@ try {
 {results.length === 0 && <p style="color:#666; text-align:center; margin-top: 50px;">暂无待处理数据。</p>}
 
 <!--
-    重要修复：加上 is:inline
-    这会让脚本在全局作用域运行，submitData 才能被 onclick 找到
+  脚本放在最后面
+  使用 is:inline 确保不被 astro 干扰
 -->
 <script is:inline>
-    // 切换选中状态
-    function toggleSelect(element) {
-        element.classList.toggle('selected');
-    }
+    // 等待页面加载完成 (保险起见)
+    document.addEventListener('DOMContentLoaded', () => {
 
-    // 提交数据逻辑
-    async function submitData() {
-        const btn = document.getElementById('submit-btn');
-        const selected = document.querySelectorAll('.item.selected');
-
-        if (selected.length === 0) return alert("请先选择！");
-
-        const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
-
-        if(!confirm(`确认标记 ${keys.length} 条数据为已完成吗？`)) return;
-
-        btn.disabled = true;
-        btn.innerText = "提交中...";
-
-        try {
-            const res = await fetch(window.location.href, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(keys)
+        // 1. 给每一个 item 绑定点击事件 (代替 toggleSelect)
+        const items = document.querySelectorAll('.item');
+        items.forEach(item => {
+            item.addEventListener('click', function() {
+                this.classList.toggle('selected');
             });
+        });
 
-            if (res.ok) {
-                window.location.reload(); // 刷新页面
-            } else {
-                const txt = await res.text();
-                alert("提交失败: " + txt);
-                btn.disabled = false;
-                btn.innerText = "提交完成项";
-            }
-        } catch (e) {
-            console.error(e);
-            alert("网络错误");
-            btn.disabled = false;
-            btn.innerText = "提交完成项";
+        // 2. 给提交按钮绑定点击事件 (代替 submitData)
+        const btn = document.getElementById('submit-btn');
+        if (btn) {
+            btn.addEventListener('click', async () => {
+                const selected = document.querySelectorAll('.item.selected');
+
+                if (selected.length === 0) {
+                    alert("请先选择！");
+                    return;
+                }
+
+                const keys = Array.from(selected).map(el => el.getAttribute('data-key'));
+
+                if(!confirm(`确认标记 ${keys.length} 条数据为已完成吗？`)) return;
+
+                btn.disabled = true;
+                btn.innerText = "提交中...";
+
+                try {
+                    const res = await fetch(window.location.href, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(keys)
+                    });
+
+                    if (res.ok) {
+                        window.location.reload();
+                    } else {
+                        const txt = await res.text();
+                        alert("提交失败: " + txt);
+                        btn.disabled = false;
+                        btn.innerText = "提交完成项";
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("网络错误");
+                    btn.disabled = false;
+                    btn.innerText = "提交完成项";
+                }
+            });
         }
-    }
+    });
 </script>
 </body>
 </html>
