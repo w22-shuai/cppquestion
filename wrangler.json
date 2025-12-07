@@ -13,9 +13,9 @@
 	"upload_source_maps": true,
 	"d1_databases": [
 		{
-			"binding": "cpporigin",
-			"database_name": "cpp_origin",
-			"database_id": "8e257480-ab3a-49d9-8a6e-3f23bb9bb6c3"
+			"binding": "cppquestion",
+			"database_name": "cppquestion",
+			"database_id": "4af252fb-ffa6-40e9-884b-2df23cb23c3a"
 		}
 	]
 }
