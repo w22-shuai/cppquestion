@@ -1,34 +1,66 @@
 ---
+export const prerender = false;
+
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
-let isLoggedIn = false;
 
-const timenow=Math.floor(Date.now() / 1000)
-
-const timelast = await env.checkidentity.get("time");
-
-if(timenow-timelast>86400){
-	await env.KV.put('time', timenow);
-	const token = crypto.randomUUID();
-	await env.KV.put('cookie', timenow);
+// 防止本地开发报错
+if (!env || !env.checkidentity) {
+	throw new Error("请确保 wrangler.toml 绑定了 checkidentity KV");
 }
 
+const timenow = Math.floor(Date.now() / 1000);
+
+// 1. 获取上次更新 Token 的时间
+// 注意：从 KV 取出来的是字符串，要转数字
+let timelast = await env.checkidentity.get("time");
+timelast = timelast ? parseInt(timelast) : 0;
+
+// 2. 检查是否超过 24小时 (86400秒) 或 从未设置过
+if ((timenow - timelast) > 86400) {
+	// 生成新的随机 Token
+	const newToken = crypto.randomUUID();
+
+	// 更新时间
+	await env.checkidentity.put('time', timenow.toString());
+	// 更新 KV 里的 Token (注意：这里存的是 newToken，不是 timenow)
+	await env.checkidentity.put('cookie', newToken);
+
+	console.log("Token 已过期，已刷新为新 Token");
+}
+
+// 3. 处理表单提交 (POST)
 if (Astro.request.method === "POST") {
 	const formData = await Astro.request.formData();
 	const key = formData.get("key");
 	const value = formData.get("value");
 
+	// 硬编码校验账号密码
 	if (key === "ybysb" && value === "e5f04750905af0abed99b3b119474ce4") {
-		const cookie=await env.KV.get('cookie');
+		// 从 KV 获取当前有效的 Token
+		// 修正：这里用 env.checkidentity，不要用 env.KV
+		const validToken = await env.checkidentity.get('cookie');
+
+		// 设置 Cookie
 		const ttl = 86400;
-		Astro.cookies.set("auth_token", cookie, { path: "/", maxAge: ttl, httpOnly: true, secure: true });
-		isLoggedIn = true;
+		Astro.cookies.set("auth_token", validToken, {
+			path: "/",
+			maxAge: ttl,
+			httpOnly: true,
+			secure: true
+		});
+
+		// 验证成功，跳转到问题页
+		return Astro.redirect("/cppquestion");
+	} else {
+		// 密码错误，可以在这里处理，或者直接让它继续渲染下面的 HTML
+		console.error("密码错误");
 	}
 }
 
-
-
-
+// 4. 处理 GET 请求
+// 不需要写 if (GET) redirect，
+// 代码执行到这里如果没有 return，就会自动渲染下面的 HTML，这样用户就能看到表单了。
 ---
 
 <!DOCTYPE html>
@@ -40,7 +72,7 @@ if (Astro.request.method === "POST") {
 </head>
 <body style="padding: 50px; display: flex; flex-direction: column; align-items: center;">
 
-<h3>状态: {isLoggedIn ? "已登录 (24h有效)" : "未登录"}</h3>
+<h3>系统登录</h3>
 
 <form method="POST" style="display: flex; flex-direction: column; gap: 10px; width: 300px;">
 	<input type="text" name="key" placeholder="Key" required>
